@@ -19,7 +19,7 @@ const ui = {
   manualInput: $('manual-input')
 };
 
-let settings = { apiKey: '', model: DEFAULT_MODEL, toneType: 'symbol', autoClipboard: true };
+let settings = { apiKey: '', model: DEFAULT_MODEL, toneType: 'symbol', autoClipboard: true, detail: 'detailed' };
 let modeOverride = 'auto';
 let current = null; // { text, context }
 let inflight = null;
@@ -38,13 +38,21 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 // --- Settings
 async function loadSettings() {
-  const s = await chrome.storage.local.get(['apiKey', 'model', 'toneType', 'autoClipboard']);
+  const s = await chrome.storage.local.get(['apiKey', 'model', 'toneType', 'autoClipboard', 'detail']);
   settings = {
     apiKey: s.apiKey || '',
     model: s.model || DEFAULT_MODEL,
     toneType: s.toneType || 'symbol',
-    autoClipboard: s.autoClipboard !== false
+    autoClipboard: s.autoClipboard !== false,
+    detail: s.detail === 'simple' ? 'simple' : 'detailed'
   };
+  applyDetailToggle();
+}
+
+function applyDetailToggle() {
+  document.querySelectorAll('#detail-toggle button').forEach((b) =>
+    b.setAttribute('aria-checked', String(b.dataset.detail === settings.detail)));
+  $('mode-row').hidden = settings.detail === 'simple';
 }
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
@@ -52,7 +60,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
   loadSettings().then(() => {
     if (!current) return;
     if ('toneType' in changes) renderSelection(current.text);
-    if (!hadKey && settings.apiKey) run();
+    if ('detail' in changes || ('toneType' in changes && settings.detail === 'simple') ||
+        (!hadKey && settings.apiKey)) run();
   });
 });
 
@@ -141,11 +150,13 @@ function renderLocalEntries(list) {
         el('span', { class: 'entry-pinyin' }, e.pinyin)),
       para(e.defs.join('; '), 'entry-en', 'en')));
   const source = el('p', { class: 'source' }, 'CC-CEDICT');
-  if (settings.apiKey) source.prepend(el('span', { class: 'spinner' }), 'AI definition loading · ');
+  if (settings.apiKey && settings.detail === 'detailed') {
+    source.prepend(el('span', { class: 'spinner' }), 'AI definition loading · ');
+  }
   return [...nodes, source];
 }
 
-async function showLocalDefinition(slot, text, signal) {
+async function showLocalDefinition(slot, text, signal, emptyMessage = '') {
   let list;
   try {
     list = await lookupWord(text, settings.toneType);
@@ -153,8 +164,13 @@ async function showLocalDefinition(slot, text, signal) {
     console.error('CC-CEDICT lookup failed', err);
     return;
   }
-  if (signal.aborted || slot.ai || !list.length) return;
-  slot.body.replaceChildren(...renderLocalEntries(list));
+  if (signal.aborted || slot.ai) return;
+  if (!list.length) {
+    if (!emptyMessage) return;
+    slot.body.replaceChildren(para(emptyMessage, 'entry-en', 'en'));
+  } else {
+    slot.body.replaceChildren(...renderLocalEntries(list));
+  }
   slot.node.hidden = false;
   slot.filled = true;
   slot.local = true;
@@ -267,16 +283,17 @@ async function run() {
   const controller = new AbortController();
   inflight = controller;
 
+  // Simple: dictionary only, for any selection length, with no API calls.
+  if (settings.detail === 'simple') {
+    showDictionaryOnly(text, controller.signal, 'No dictionary entries found.');
+    return;
+  }
+
   if (!settings.apiKey) {
     const frag = document.createDocumentFragment();
     frag.append('Add your Gemini API key in ', openSettingsLink('Settings'), ' to see explanations and examples.');
     setStatus(frag, { error: true });
-    if (mode === 'word') {
-      const [slot] = createSlots(mode).filter((s) => s.id === 'entries');
-      ui.results.replaceChildren(slot.node);
-      slot.node.hidden = true;
-      showLocalDefinition(slot, text, controller.signal);
-    }
+    if (mode === 'word') showDictionaryOnly(text, controller.signal);
     return;
   }
 
@@ -300,6 +317,13 @@ function settleLocal(group) {
   for (const slot of group) {
     if (slot.local) slot.body.querySelector('.source')?.replaceChildren('CC-CEDICT');
   }
+}
+
+function showDictionaryOnly(text, signal, emptyMessage) {
+  const [slot] = createSlots('word').filter((s) => s.id === 'entries');
+  ui.results.replaceChildren(slot.node);
+  slot.node.hidden = true;
+  showLocalDefinition(slot, text, signal, emptyMessage);
 }
 
 function finishGroup(group, text) {
@@ -408,10 +432,15 @@ async function lookupClipboard() {
 }
 
 // --- Controls
-document.querySelectorAll('.segmented button').forEach((btn) => {
+document.querySelectorAll('#detail-toggle button').forEach((btn) => {
+  // Saved setting; the storage listener re-renders every open panel.
+  btn.addEventListener('click', () => chrome.storage.local.set({ detail: btn.dataset.detail }));
+});
+
+document.querySelectorAll('#mode-toggle button').forEach((btn) => {
   btn.addEventListener('click', () => {
     modeOverride = btn.dataset.mode;
-    document.querySelectorAll('.segmented button').forEach((b) =>
+    document.querySelectorAll('#mode-toggle button').forEach((b) =>
       b.setAttribute('aria-checked', String(b === btn)));
     run();
   });

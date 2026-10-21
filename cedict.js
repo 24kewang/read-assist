@@ -4,6 +4,7 @@
 const MAX_WORD = 8;
 const MAX_ENTRIES = 6;
 const MAX_DEFS = 6;
+const MAX_PHRASE_WORDS = 60;
 
 let ready = null;
 
@@ -103,7 +104,9 @@ export async function lookupWord(text, toneType) {
   const index = await loadDictionary();
   const clean = text.replace(/[^\u3400-\u9fff\uf900-\ufaff]/g, '');
   if (!clean) return [];
-  const words = index.has(clean) ? [clean] : segment(index, clean);
+  const words = index.has(clean)
+    ? [clean]
+    : [...new Set(segment(index, clean))].slice(0, MAX_PHRASE_WORDS);
   const perWord = words.length > 1 ? 2 : MAX_ENTRIES;
   return words.flatMap((w) => {
     let entries = entriesFor(index, w);

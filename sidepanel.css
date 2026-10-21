@@ -26,6 +26,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -41,7 +42,9 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
-.brand { font-weight: 600; letter-spacing: 0.01em; }
+.brand { font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; }
+.bar { gap: 8px; }
+@media (max-width: 330px) { .brand { font-size: 0; } .brand::first-letter { font-size: 16px; } }
 .bar-actions { display: flex; gap: 4px; }
 .icon-btn {
   border: 1px solid transparent; background: none; color: var(--text);

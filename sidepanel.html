@@ -8,6 +8,10 @@
 <body>
   <header class="bar">
     <span class="brand">读 Read Assist</span>
+    <div id="detail-toggle" class="segmented" role="radiogroup" aria-label="Detail level">
+      <button data-detail="simple" aria-checked="false" role="radio" title="Dictionary only: instant, no API calls">Simple</button>
+      <button data-detail="detailed" aria-checked="true" role="radio" title="Dictionary plus Gemini explanations">Detailed</button>
+    </div>
     <div class="bar-actions">
       <button id="clipboard-btn" class="icon-btn" title="Look up clipboard text (Alt+Shift+L)">📋</button>
       <button id="settings-btn" class="icon-btn" title="Settings">⚙︎</button>
@@ -25,8 +29,8 @@
     <section id="view" hidden>
       <div class="selection-card">
         <div id="selection" class="selection" lang="zh"></div>
-        <div class="mode-row">
-          <div class="segmented" role="radiogroup" aria-label="Lookup mode">
+        <div class="mode-row" id="mode-row">
+          <div id="mode-toggle" class="segmented" role="radiogroup" aria-label="Lookup mode">
             <button data-mode="auto" aria-checked="true" role="radio">Auto</button>
             <button data-mode="word" aria-checked="false" role="radio">Word</button>
             <button data-mode="passage" aria-checked="false" role="radio">Passage</button>

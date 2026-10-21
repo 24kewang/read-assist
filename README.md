@@ -24,6 +24,12 @@ The extension is only active while the sidebar is open. Close the sidebar with i
 | Re-run a lookup | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> or 📋 looks up whatever is on the clipboard. |
 | Anything else | Type or paste into the box at the bottom of the sidebar. |
 
+The **Simple / Detailed** switch at the top of the sidebar picks how much to look up:
+- **Simple**: dictionary only. It's instant, works offline, makes no API calls, and breaks any selection (even a whole passage) into dictionary words.
+- **Detailed**: the dictionary plus Gemini's explanations, examples and translation.
+
+Your choice is remembered.
+
 The **Auto / Word / Passage** toggle overrides the automatic choice. Auto treats up to 6 Chinese characters with no sentence punctuation as a word lookup.
 
 To change the shortcut, open `chrome://extensions/shortcuts`.
