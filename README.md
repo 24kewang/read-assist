@@ -20,8 +20,8 @@ The extension is only active while the sidebar is open. Close the sidebar with i
 | Where | How |
 |---|---|
 | Ordinary web pages | Just select text. The sidebar updates automatically. |
-| PDFs (Chrome's PDF viewer) | Select the text, press <kbd>Ctrl</kbd>+<kbd>C</kbd>, then <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> (or click 📋 in the sidebar). |
-| Google Docs | Select and press <kbd>Ctrl</kbd>+<kbd>C</kbd>. The sidebar reads the clipboard automatically; if not, use <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> or 📋. |
+| PDFs and Google Docs | Select the text and press <kbd>Ctrl</kbd>+<kbd>C</kbd>. The sidebar picks it up from the clipboard automatically. |
+| Re-run a lookup | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> or 📋 looks up whatever is on the clipboard. |
 | Anything else | Type or paste into the box at the bottom of the sidebar. |
 
 The **Auto / Word / Passage** toggle overrides the automatic choice. Auto treats up to 6 Chinese characters with no sentence punctuation as a word lookup.
@@ -43,6 +43,7 @@ Answers stream into the sidebar as they're generated. Each lookup sends **two re
 
 ## Notes
 
+- While the sidebar is open, it checks the clipboard about once a second to catch <kbd>Ctrl</kbd>+<kbd>C</kbd> in PDFs, where extensions can't see the selection. Clipboard text is ignored unless it changed and contains Chinese, and whatever was on the clipboard when the sidebar opened is never looked up. You can turn this off in Settings.
 - Selections are sent only to Google's Gemini API, using your key, and only while the sidebar is open. Some surrounding text from the page is sent too, so the model can choose the right meaning.
 - The pinyin above the selection comes from [pinyin-pro](https://github.com/zh-lx/pinyin-pro) (MIT, vendored in `lib/`). It is very good but can miss rare readings of polyphonic characters. The pinyin in the definition cards comes from the model.
 

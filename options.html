@@ -49,6 +49,11 @@
       </div>
     </div>
 
+    <div class="field">
+      <label><input type="checkbox" id="autoClipboard"> Look up copied Chinese text automatically</label>
+      <p class="help">While the sidebar is open, it checks the clipboard about once a second, so pressing Ctrl+C in PDFs and Google Docs looks the text up. The clipboard is only read inside your browser; text is sent to Gemini only if it contains Chinese.</p>
+    </div>
+
     <button id="save">Save</button><span id="saved"></span>
   </main>
   <script type="module" src="options.js"></script>

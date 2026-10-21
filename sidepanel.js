@@ -5,6 +5,7 @@ const CJK_ALL = /[㐀-鿿豈-﫿]/g;
 const SENTENCE_PUNCT = /[。！？；，、：,.!?;:]/;
 const WORD_MAX_CHARS = 6;
 const CACHE_LIMIT = 100;
+const CLIPBOARD_POLL_MS = 700;
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -17,7 +18,7 @@ const ui = {
   manualInput: $('manual-input')
 };
 
-let settings = { apiKey: '', model: DEFAULT_MODEL, toneType: 'symbol' };
+let settings = { apiKey: '', model: DEFAULT_MODEL, toneType: 'symbol', autoClipboard: true };
 let modeOverride = 'auto';
 let current = null; // { text, context }
 let inflight = null;
@@ -31,16 +32,17 @@ port.onMessage.addListener((msg) => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'selection') lookup(msg.text, msg.context);
-  else if (msg.type === 'read-clipboard') lookupClipboard();
+  else if (msg.type === 'clipboard-changed') checkClipboard();
 });
 
 // --- Settings
 async function loadSettings() {
-  const s = await chrome.storage.local.get(['apiKey', 'model', 'toneType']);
+  const s = await chrome.storage.local.get(['apiKey', 'model', 'toneType', 'autoClipboard']);
   settings = {
     apiKey: s.apiKey || '',
     model: s.model || DEFAULT_MODEL,
-    toneType: s.toneType || 'symbol'
+    toneType: s.toneType || 'symbol',
+    autoClipboard: s.autoClipboard !== false
   };
 }
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -308,8 +310,32 @@ async function readClipboard() {
   return text;
 }
 
+// Auto-lookup on copy. Chrome's PDF viewer gives extensions no copy event,
+// so watch the clipboard while the panel is open. Skip while the panel
+// itself has focus so the hidden paste target never steals the caret.
+let lastClipboard = null;
+let checking = false;
+
+async function checkClipboard() {
+  if (checking || !settings.autoClipboard || document.hasFocus()) return;
+  checking = true;
+  try {
+    const text = (await readClipboard()).trim();
+    if (lastClipboard === null || text === lastClipboard) {
+      lastClipboard = text; // first read is a baseline, not a lookup
+      return;
+    }
+    lastClipboard = text;
+    // Copying a selection that was already looked up shouldn't refetch.
+    if (CJK.test(text) && text !== current?.text) lookup(text);
+  } finally {
+    checking = false;
+  }
+}
+
 async function lookupClipboard() {
   const text = (await readClipboard()).trim();
+  lastClipboard = text;
   if (!text) {
     ui.empty.hidden = true;
     ui.view.hidden = false;
@@ -354,3 +380,7 @@ ui.manualInput.addEventListener('keydown', (e) => {
 });
 
 const settingsReady = loadSettings();
+settingsReady.then(() => {
+  checkClipboard();
+  setInterval(checkClipboard, CLIPBOARD_POLL_MS);
+});

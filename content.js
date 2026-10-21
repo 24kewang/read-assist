@@ -60,16 +60,12 @@
   document.addEventListener('mouseup', schedule);
   document.addEventListener('keyup', schedule);
 
-  // Google Docs (canvas rendering) and similar editors don't expose the
-  // selection in the DOM; when the user copies, ask the panel to read the
-  // clipboard instead.
+  // Let the panel check the clipboard right away instead of waiting for
+  // its next poll (Google Docs, and pages where selection isn't in the DOM).
   document.addEventListener('copy', () => {
     if (!active) return;
-    const text = window.getSelection()?.toString().trim();
-    if (text && CJK.test(text)) return; // selectionchange already handles it
     setTimeout(() => {
-      lastSent = '';
-      chrome.runtime.sendMessage({ type: 'read-clipboard' }).catch(() => {});
-    }, 100);
+      chrome.runtime.sendMessage({ type: 'clipboard-changed' }).catch(() => {});
+    }, 50);
   });
 })();
