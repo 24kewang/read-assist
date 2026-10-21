@@ -35,6 +35,8 @@ To change the shortcut, open `chrome://extensions/shortcuts`.
 
 ## Speed
 
+For short selections, the **Definition** card fills instantly from the bundled CC-CEDICT dictionary (English definitions, works offline and without an API key). Gemini's definition, which adds part of speech and a simple-Chinese explanation, is fetched at the same time. It replaces the dictionary entry only once it has fully arrived.
+
 Answers stream into the sidebar as they're generated. Each lookup sends **two requests to Gemini in parallel**:
 - the priority one: the definition and explanation (or, for passages, the translation, deeper meaning and simple paraphrase)
 - the extras: examples and usage notes, or key vocabulary and notes
@@ -55,3 +57,20 @@ Answers stream into the sidebar as they're generated. Each lookup sends **two re
 - `sidepanel.html`, `sidepanel.css`, `sidepanel.js`: the sidebar UI
 - `gemini.js`: prompts, streaming API call and the section parser
 - `options.html`, `options.js`: settings page
+- `cedict.js`: offline dictionary lookup and pinyin formatting
+- `data/cedict.tsv.gz`: CC-CEDICT, prebuilt by `scripts/build-cedict.mjs`
+
+## Updating the dictionary
+
+Download `cedict_1_0_ts_utf-8_mdbg.zip` from [MDBG](https://www.mdbg.net/chinese/dictionary?page=cc-cedict), unzip it, and run:
+
+```
+node scripts/build-cedict.mjs path/to/cedict_ts.u8
+```
+
+The bundled copy is CC-CEDICT as of January 2026.
+
+## Credits
+
+- [CC-CEDICT](https://cc-cedict.org/) by MDBG, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). `data/cedict.tsv.gz` is a reformatted copy and is under the same license.
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro), MIT.

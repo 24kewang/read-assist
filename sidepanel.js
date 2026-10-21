@@ -1,4 +1,5 @@
 import { streamGemini, buildPrompts, parseSections, parseRows, DEFAULT_MODEL } from './gemini.js';
+import { loadDictionary, lookupWord } from './cedict.js';
 
 const CJK = /[㐀-鿿豈-﫿]/;
 const CJK_ALL = /[㐀-鿿豈-﫿]/g;
@@ -130,6 +131,35 @@ function renderEntries(raw) {
       para(en, 'entry-en', 'en')));
 }
 
+// Instant definitions from the bundled dictionary, shown until the AI's
+// definition (which adds simple-Chinese explanations) has fully arrived.
+function renderLocalEntries(list) {
+  const nodes = list.map((e) =>
+    el('div', { class: 'entry' },
+      el('div', { class: 'entry-head' },
+        el('span', { class: 'entry-word', lang: 'zh' }, e.word),
+        el('span', { class: 'entry-pinyin' }, e.pinyin)),
+      para(e.defs.join('; '), 'entry-en', 'en')));
+  const source = el('p', { class: 'source' }, 'CC-CEDICT');
+  if (settings.apiKey) source.prepend(el('span', { class: 'spinner' }), 'AI definition loading · ');
+  return [...nodes, source];
+}
+
+async function showLocalDefinition(slot, text, signal) {
+  let list;
+  try {
+    list = await lookupWord(text, settings.toneType);
+  } catch (err) {
+    console.error('CC-CEDICT lookup failed', err);
+    return;
+  }
+  if (signal.aborted || slot.ai || !list.length) return;
+  slot.body.replaceChildren(...renderLocalEntries(list));
+  slot.node.hidden = false;
+  slot.filled = true;
+  slot.local = true;
+}
+
 function renderExamples(raw) {
   return el('ul', { class: 'examples' }, parseRows(raw).map(([zh, py, en]) =>
     el('li', {},
@@ -173,13 +203,20 @@ function createSlots(mode) {
   });
 }
 
-function fillSlots(slots, text) {
+function fillSlots(slots, text, done = false) {
   const parsed = parseSections(text);
+  const order = Object.keys(parsed);
   for (const slot of slots) {
     const raw = parsed[slot.id];
     if (!raw) continue;
+    // Keep a dictionary result until the AI's version of the section is
+    // complete (a later section has started, or the stream ended).
+    const complete = done || order.indexOf(slot.id) < order.length - 1;
+    if (slot.local && !complete) continue;
     slot.body.replaceChildren(...[slot.render(raw)].flat().filter(Boolean));
     slot.filled = true;
+    slot.local = false;
+    slot.ai = true;
   }
 }
 
@@ -227,19 +264,28 @@ async function run() {
   ui.results.replaceChildren();
   setStatus('');
 
+  const controller = new AbortController();
+  inflight = controller;
+
   if (!settings.apiKey) {
     const frag = document.createDocumentFragment();
-    frag.append('Add your Gemini API key in ', openSettingsLink('Settings'), ' to see definitions and explanations.');
+    frag.append('Add your Gemini API key in ', openSettingsLink('Settings'), ' to see explanations and examples.');
     setStatus(frag, { error: true });
+    if (mode === 'word') {
+      const [slot] = createSlots(mode).filter((s) => s.id === 'entries');
+      ui.results.replaceChildren(slot.node);
+      slot.node.hidden = true;
+      showLocalDefinition(slot, text, controller.signal);
+    }
     return;
   }
 
-  const controller = new AbortController();
-  inflight = controller;
   const key = `${settings.model}|${mode}|${text}|${context}`;
   const prompts = buildPrompts(mode, text, context);
   const slots = createSlots(mode);
   const cached = cacheGet(key) || {};
+  const entriesSlot = slots.find((s) => s.id === 'entries');
+  if (entriesSlot) showLocalDefinition(entriesSlot, text, controller.signal);
 
   // Both requests run in parallel; each fills only its own cards.
   for (const req of ['primary', 'secondary']) {
@@ -249,8 +295,16 @@ async function run() {
   }
 }
 
+// The AI request ended without replacing a dictionary result.
+function settleLocal(group) {
+  for (const slot of group) {
+    if (slot.local) slot.body.querySelector('.source')?.replaceChildren('CC-CEDICT');
+  }
+}
+
 function finishGroup(group, text) {
-  fillSlots(group, text);
+  fillSlots(group, text, true);
+  settleLocal(group);
   for (const slot of group) if (!slot.filled) slot.node.remove();
 }
 
@@ -276,6 +330,7 @@ async function streamGroup(req, group, prompt, key, signal) {
 }
 
 function showGroupError(req, group, err, prompt, key, signal) {
+  settleLocal(group);
   const msg = el('p', { class: 'card-error' }, err.message || String(err), ' ');
   const retry = el('button', { class: 'link-btn' }, 'Retry');
   retry.addEventListener('click', () => {
@@ -380,6 +435,7 @@ ui.manualInput.addEventListener('keydown', (e) => {
 });
 
 const settingsReady = loadSettings();
+loadDictionary().catch((err) => console.error('Could not load CC-CEDICT', err));
 settingsReady.then(() => {
   checkClipboard();
   setInterval(checkClipboard, CLIPBOARD_POLL_MS);

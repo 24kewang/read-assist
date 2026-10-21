@@ -138,3 +138,5 @@ button.primary {
   border: 0; background: none; padding: 0; color: var(--accent);
   font: inherit; text-decoration: underline; cursor: pointer;
 }
+.source { margin-top: 8px !important; font-size: 11px; color: var(--muted); }
+.source .spinner { width: 9px; height: 9px; border-width: 1.5px; margin-right: 4px; }
