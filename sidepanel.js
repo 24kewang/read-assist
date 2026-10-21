@@ -1,4 +1,4 @@
-import { callGemini, DEFAULT_MODEL } from './gemini.js';
+import { streamGemini, buildPrompts, parseSections, parseRows, DEFAULT_MODEL } from './gemini.js';
 
 const CJK = /[㐀-鿿豈-﫿]/;
 const CJK_ALL = /[㐀-鿿豈-﫿]/g;
@@ -112,51 +112,73 @@ function setStatus(content, { error = false, loading = false } = {}) {
   if (content) ui.status.append(content);
 }
 
-function card(title, ...body) {
-  return el('section', { class: 'card' }, el('h3', {}, title), ...body);
-}
-
 const para = (text, cls = '', lang = 'zh') => text ? el('p', { class: cls, lang }, text) : null;
+const prose = (lang = 'zh', cls = '') => (raw) =>
+  raw.split(/\n+/).filter(Boolean).map((t) => para(t, cls, lang));
 
-// --- Result rendering
-function renderWord(r) {
-  const entries = (r.entries || []).map((e) =>
+// --- Section renderers (each takes the raw, possibly partial, section text)
+function renderEntries(raw) {
+  return parseRows(raw).map(([word, py, pos, zh, en]) =>
     el('div', { class: 'entry' },
       el('div', { class: 'entry-head' },
-        el('span', { class: 'entry-word', lang: 'zh' }, e.word),
-        el('span', { class: 'entry-pinyin' }, e.pinyin),
-        e.partOfSpeech ? el('span', { class: 'pos' }, e.partOfSpeech) : null),
-      para(e.simpleDefinitionZh),
-      para(e.english, 'entry-en', 'en')));
-
-  const examples = (r.examples || []).map((x) =>
-    el('li', {},
-      el('div', { lang: 'zh' }, x.zh),
-      el('div', { class: 'ex-pinyin' }, x.pinyin),
-      el('div', { class: 'ex-en', lang: 'en' }, x.en)));
-
-  ui.results.replaceChildren(
-    card('释义 · Definition', entries),
-    r.explanationZh ? card('深入解释 · Explanation', para(r.explanationZh)) : '',
-    examples.length ? card('例句 · Examples', el('ul', { class: 'examples' }, examples)) : '',
-    r.usageNotesZh ? card('用法 · Usage notes', para(r.usageNotesZh)) : ''
-  );
+        el('span', { class: 'entry-word', lang: 'zh' }, word),
+        el('span', { class: 'entry-pinyin' }, py),
+        pos ? el('span', { class: 'pos' }, pos) : null),
+      para(zh),
+      para(en, 'entry-en', 'en')));
 }
 
-function renderPassage(r) {
-  const vocab = (r.keyVocab || []).map((v) =>
-    el('tr', {},
-      el('td', { lang: 'zh' }, v.word),
-      el('td', {}, v.pinyin),
-      el('td', { lang: 'en' }, v.english)));
+function renderExamples(raw) {
+  return el('ul', { class: 'examples' }, parseRows(raw).map(([zh, py, en]) =>
+    el('li', {},
+      el('div', { lang: 'zh' }, zh),
+      py ? el('div', { class: 'ex-pinyin' }, py) : null,
+      en ? el('div', { class: 'ex-en', lang: 'en' }, en) : null)));
+}
 
-  ui.results.replaceChildren(
-    card('English', para(r.translationEn, 'big-en', 'en')),
-    r.simpleParaphraseZh ? card('简单地说 · In simple Chinese', para(r.simpleParaphraseZh)) : '',
-    r.explanationZh ? card('深入解读 · Deeper meaning', para(r.explanationZh)) : '',
-    vocab.length ? card('重点词语 · Key vocabulary', el('table', { class: 'vocab' }, vocab)) : '',
-    r.culturalOrGrammarNotesZh ? card('语法与文化 · Notes', para(r.culturalOrGrammarNotesZh)) : ''
-  );
+function renderVocab(raw) {
+  return el('table', { class: 'vocab' }, parseRows(raw).map(([word, py, en]) =>
+    el('tr', {},
+      el('td', { lang: 'zh' }, word),
+      el('td', {}, py || ''),
+      el('td', { lang: 'en' }, en || ''))));
+}
+
+// Cards in display order. `req` says which of the two parallel requests
+// produces the section; primary holds what matters most.
+const SECTIONS = {
+  word: [
+    { id: 'entries', req: 'primary', title: '释义 · Definition', render: renderEntries },
+    { id: 'explanation', req: 'primary', title: '深入解释 · Explanation', render: prose() },
+    { id: 'examples', req: 'secondary', title: '例句 · Examples', render: renderExamples },
+    { id: 'usage', req: 'secondary', title: '用法 · Usage notes', render: prose() }
+  ],
+  passage: [
+    { id: 'translation', req: 'primary', title: 'English', render: prose('en', 'big-en') },
+    { id: 'explanation', req: 'primary', title: '深入解读 · Deeper meaning', render: prose() },
+    { id: 'paraphrase', req: 'primary', title: '简单地说 · In simple Chinese', render: prose() },
+    { id: 'vocab', req: 'secondary', title: '重点词语 · Key vocabulary', render: renderVocab },
+    { id: 'notes', req: 'secondary', title: '语法与文化 · Notes', render: prose() }
+  ]
+};
+
+function createSlots(mode) {
+  return SECTIONS[mode].map((sec) => {
+    const body = el('div', { class: 'card-body' }, el('div', { class: 'shimmer' }), el('div', { class: 'shimmer short' }));
+    const node = el('section', { class: 'card', 'data-section': sec.id }, el('h3', {}, sec.title), body);
+    ui.results.append(node);
+    return { ...sec, node, body, filled: false };
+  });
+}
+
+function fillSlots(slots, text) {
+  const parsed = parseSections(text);
+  for (const slot of slots) {
+    const raw = parsed[slot.id];
+    if (!raw) continue;
+    slot.body.replaceChildren(...[slot.render(raw)].flat().filter(Boolean));
+    slot.filled = true;
+  }
 }
 
 function openSettingsLink(label) {
@@ -177,6 +199,20 @@ function lookup(text, context = '') {
   run();
 }
 
+function cacheGet(key) {
+  const hit = cache.get(key);
+  if (hit) { cache.delete(key); cache.set(key, hit); }
+  return hit;
+}
+
+function cachePut(key, req, text) {
+  const entry = cache.get(key) || {};
+  entry[req] = text;
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
+}
+
 async function run() {
   await settingsReady;
   if (!current) return;
@@ -185,7 +221,9 @@ async function run() {
   ui.modeLabel.textContent = modeOverride === 'auto' ? `detected: ${mode}` : '';
 
   inflight?.abort();
+  inflight = null;
   ui.results.replaceChildren();
+  setStatus('');
 
   if (!settings.apiKey) {
     const frag = document.createDocumentFragment();
@@ -194,39 +232,61 @@ async function run() {
     return;
   }
 
-  const key = `${settings.model}|${mode}|${text}|${context}`;
-  const render = mode === 'word' ? renderWord : renderPassage;
-  if (cache.has(key)) {
-    const hit = cache.get(key);
-    cache.delete(key);
-    cache.set(key, hit);
-    setStatus('');
-    render(hit);
-    return;
-  }
-
   const controller = new AbortController();
   inflight = controller;
-  setStatus(mode === 'word' ? 'Looking up…' : 'Reading the passage…', { loading: true });
+  const key = `${settings.model}|${mode}|${text}|${context}`;
+  const prompts = buildPrompts(mode, text, context);
+  const slots = createSlots(mode);
+  const cached = cacheGet(key) || {};
+
+  // Both requests run in parallel; each fills only its own cards.
+  for (const req of ['primary', 'secondary']) {
+    const group = slots.filter((s) => s.req === req);
+    if (cached[req]) finishGroup(group, cached[req]);
+    else streamGroup(req, group, prompts[req], key, controller.signal);
+  }
+}
+
+function finishGroup(group, text) {
+  fillSlots(group, text);
+  for (const slot of group) if (!slot.filled) slot.node.remove();
+}
+
+async function streamGroup(req, group, prompt, key, signal) {
+  for (const slot of group) {
+    if (slot.filled) continue;
+    slot.node.hidden = false;
+    slot.body.replaceChildren(el('div', { class: 'shimmer' }), el('div', { class: 'shimmer short' }));
+  }
+  let text = '';
   try {
-    const result = await callGemini({
-      apiKey: settings.apiKey,
-      model: settings.model,
-      mode,
-      text,
-      context,
-      signal: controller.signal
-    });
-    if (controller.signal.aborted) return;
-    cache.set(key, result);
-    if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
-    setStatus('');
-    render(result);
+    for await (text of streamGemini({ apiKey: settings.apiKey, model: settings.model, prompt, signal })) {
+      if (signal.aborted) return;
+      fillSlots(group, text);
+    }
+    if (signal.aborted) return;
+    cachePut(key, req, text);
+    finishGroup(group, text);
   } catch (err) {
-    if (err.name === 'AbortError') return;
-    setStatus(err.message || String(err), { error: true });
-  } finally {
-    if (inflight === controller) inflight = null;
+    if (err.name === 'AbortError' || signal.aborted) return;
+    showGroupError(req, group, err, prompt, key, signal);
+  }
+}
+
+function showGroupError(req, group, err, prompt, key, signal) {
+  const msg = el('p', { class: 'card-error' }, err.message || String(err), ' ');
+  const retry = el('button', { class: 'link-btn' }, 'Retry');
+  retry.addEventListener('click', () => {
+    msg.remove();
+    streamGroup(req, group, prompt, key, signal);
+  });
+  msg.append(retry);
+  const unfilled = group.filter((s) => !s.filled);
+  if (unfilled.length) {
+    unfilled[0].body.replaceChildren(msg);
+    for (const s of unfilled.slice(1)) s.node.hidden = true;
+  } else {
+    group[group.length - 1].body.append(msg);
   }
 }
 

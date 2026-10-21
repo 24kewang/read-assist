@@ -33,6 +33,14 @@ To change the shortcut, open `chrome://extensions/shortcuts`.
 - **Model**: defaults to `gemini-2.5-flash`. Any Gemini model that supports JSON output works.
 - **Pinyin tones**: tone marks (nǐ hǎo) or numbers (ni3 hao3).
 
+## Speed
+
+Answers stream into the sidebar as they're generated. Each lookup sends **two requests to Gemini in parallel**:
+- the priority one: the definition and explanation (or, for passages, the translation, deeper meaning and simple paraphrase)
+- the extras: examples and usage notes, or key vocabulary and notes
+
+"Thinking" is turned down for supported models so the first words arrive quickly. Lookups you've already done are cached for the session. On the free tier's per-minute limit, the extras card may say "Rate limited"; click **Retry**.
+
 ## Notes
 
 - Selections are sent only to Google's Gemini API, using your key, and only while the sidebar is open. Some surrounding text from the page is sent too, so the model can choose the right meaning.
@@ -44,5 +52,5 @@ To change the shortcut, open `chrome://extensions/shortcuts`.
 - `background.js`: opens the side panel and tracks whether it is open (on/off state)
 - `content.js`: detects Chinese selections on pages
 - `sidepanel.html`, `sidepanel.css`, `sidepanel.js`: the sidebar UI
-- `gemini.js`: prompts, response schemas and the API call
+- `gemini.js`: prompts, streaming API call and the section parser
 - `options.html`, `options.js`: settings page

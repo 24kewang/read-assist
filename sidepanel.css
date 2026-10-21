@@ -125,3 +125,16 @@ button.primary {
   border: 0; border-radius: 6px; padding: 0 12px; background: var(--accent); color: #fff;
   font: inherit; font-weight: 600; cursor: pointer;
 }
+
+.shimmer {
+  height: 12px; border-radius: 4px; margin: 6px 0;
+  background: linear-gradient(90deg, var(--border) 25%, var(--accent-soft) 50%, var(--border) 75%);
+  background-size: 200% 100%; animation: shimmer 1.2s linear infinite;
+}
+.shimmer.short { width: 60%; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.card-error { color: var(--accent); font-size: 13px; }
+.link-btn {
+  border: 0; background: none; padding: 0; color: var(--accent);
+  font: inherit; text-decoration: underline; cursor: pointer;
+}
