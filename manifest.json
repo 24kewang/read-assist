@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Read Assist — Chinese Reading Sidebar",
+  "version": "0.1.0",
+  "description": "Select Chinese text anywhere to see pinyin, simple definitions, English translation and deeper explanation in a sidebar.",
+  "permissions": ["sidePanel", "storage", "clipboardRead"],
+  "host_permissions": ["<all_urls>", "https://generativelanguage.googleapis.com/*"],
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": {
+    "default_title": "Open Read Assist",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "lookup-clipboard": {
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "Look up the text currently on the clipboard"
+    }
+  },
+  "options_page": "options.html"
+}
